@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>VideoDownloader Receiver</title>
+  <!-- Cast Web Receiver SDK (CAF v3). -->
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; }
+    cast-media-player { --theme-hue: 210; --progress-color: #4fa3ff; }
+  </style>
+</head>
+<body>
+  <cast-media-player></cast-media-player>
+  <script>
+    // Custom receiver for the VideoDownloader Android app.
+    //
+    // It exists for one setting. Google made Shaka Player the Default Media Receiver's HLS engine
+    // (2026-05-18), and on this TV that broke casting the app's MPEG-TS streams: starts inside the
+    // first ~20s fail with a bare MEDIA_UNKNOWN (detail 100), and Shaka's ~10s buffering goal
+    // stalls at every boundary of a 20s / 6.5MB segment. Everything played before the switch, so
+    // this puts HLS back on the Media Player Library (MPL) — what the default receiver used then.
+    const NS = 'urn:x-cast:com.videodownloader.debug';
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+    const Ev = cast.framework.events.EventType;
+
+    // Receiver-side events, sent back to the phone so they show up in its log next to the
+    // sender's own — the receiver's reasons have only ever been visible as "detail=100".
+    function report(kind, data) {
+      try {
+        context.sendCustomMessage(NS, undefined, Object.assign({ kind: kind, t: Date.now() }, data || {}));
+      } catch (e) { /* no sender connected yet */ }
+    }
+
+    // The app's proxied URLs (http://phone:port/hls?u=...) carry no file extension, so say what
+    // the segments are rather than leaving the player to probe for it.
+    playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function (req) {
+      const m = req.media;
+      if (m && /mpegurl/i.test(m.contentType || '')) {
+        m.hlsSegmentFormat = cast.framework.messages.HlsSegmentFormat.TS;
+        m.hlsVideoSegmentFormat = cast.framework.messages.HlsVideoSegmentFormat.MPEG2_TS;
+      }
+      report('load', { currentTime: req.currentTime, url: m && m.contentId });
+      return req;
+    });
+
+    playerManager.addEventListener(Ev.ERROR, function (e) {
+      report('error', {
+        detailedErrorCode: e.detailedErrorCode,
+        reason: e.reason,
+        error: e.error ? String(e.error.message || e.error.code || e.error) : null
+      });
+    });
+    playerManager.addEventListener(Ev.PLAYER_LOAD_COMPLETE, function () {
+      report('loaded', { time: playerManager.getCurrentTimeSec() });
+    });
+    playerManager.addEventListener(Ev.BUFFERING, function (e) {
+      report('buffering', { on: e.isBuffering, time: playerManager.getCurrentTimeSec() });
+    });
+
+    const options = new cast.framework.CastReceiverOptions();
+    options.useShakaForHls = false;
+    options.customNamespaces = {};
+    options.customNamespaces[NS] = cast.framework.system.MessageType.JSON;
+    context.start(options);
+    report('started', { engine: 'MPL', sdk: cast.framework.VERSION });
+  </script>
+</body>
+</html>
