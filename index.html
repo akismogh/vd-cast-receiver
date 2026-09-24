@@ -59,7 +59,26 @@
       report('buffering', { on: e.isBuffering, time: playerManager.getCurrentTimeSec() });
     });
 
+    // Stay up between episodes. By default a CAF receiver closes itself the moment playback ends
+    // and it goes idle — which is right for a single video, and wrong here: the phone needs a few
+    // seconds after an episode ends to resolve and load the next one, and the receiver had already
+    // shut down (ending the cast session) before it arrived. Seen 2026-09-23: the session ended
+    // within a second of the episode's end and the next episode never played. The Default Media
+    // Receiver waits; this does too now — for up to IDLE_CLOSE_MS, then closes on its own so a
+    // finished show does not leave the TV parked on this page indefinitely.
+    const IDLE_CLOSE_MS = 90 * 1000;
+    let idleCloseTimer = null;
+    function cancelIdleClose() { if (idleCloseTimer) { clearTimeout(idleCloseTimer); idleCloseTimer = null; } }
+    playerManager.addEventListener(Ev.MEDIA_FINISHED, function (e) {
+      report('finished', { reason: e.endedReason, time: e.currentMediaTime });
+      cancelIdleClose();
+      idleCloseTimer = setTimeout(function () { report('idle-close', {}); context.stop(); }, IDLE_CLOSE_MS);
+    });
+    playerManager.addEventListener(Ev.REQUEST_LOAD, cancelIdleClose);
+    playerManager.addEventListener(Ev.PLAYING, cancelIdleClose);
+
     const options = new cast.framework.CastReceiverOptions();
+    options.disableIdleTimeout = true;
     options.useShakaForHls = false;
     options.customNamespaces = {};
     options.customNamespaces[NS] = cast.framework.system.MessageType.JSON;
