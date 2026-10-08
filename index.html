@@ -8,10 +8,17 @@
   <style>
     html, body { margin: 0; height: 100%; background: #000; }
     cast-media-player { --theme-hue: 210; --progress-color: #4fa3ff; }
+    /* Live Japanese subtitles sent by the phone (VideoDownloader's live translation). */
+    #sub { position: fixed; left: 0; right: 0; bottom: 6%; z-index: 1000; text-align: center;
+           pointer-events: none; display: none; }
+    #sub span { display: inline-block; max-width: 80%; background: rgba(0,0,0,0.72); color: #fff;
+                font-size: 40px; line-height: 1.35; padding: 8px 22px; border-radius: 8px;
+                font-family: "Noto Sans CJK JP", "Noto Sans JP", sans-serif; }
   </style>
 </head>
 <body>
   <cast-media-player></cast-media-player>
+  <div id="sub"><span></span></div>
   <script>
     // Custom receiver for the VideoDownloader Android app.
     //
@@ -85,6 +92,19 @@
     });
     playerManager.addEventListener(Ev.REQUEST_LOAD, cancelIdleClose);
     playerManager.addEventListener(Ev.PLAYING, cancelIdleClose);
+
+    // Subtitles: {kind:"sub", text, ms} on the same namespace the receiver reports on. Each
+    // line replaces the last and clears itself after its reading time.
+    const subBox = document.getElementById('sub');
+    let subTimer = null;
+    context.addCustomMessageListener(NS, function (e) {
+      const d = e.data || {};
+      if (d.kind !== 'sub' || typeof d.text !== 'string') return;
+      subBox.firstChild.textContent = d.text;
+      subBox.style.display = 'block';
+      clearTimeout(subTimer);
+      subTimer = setTimeout(function () { subBox.style.display = 'none'; }, Math.min(d.ms || 4000, 9000));
+    });
 
     const options = new cast.framework.CastReceiverOptions();
     options.disableIdleTimeout = true;
