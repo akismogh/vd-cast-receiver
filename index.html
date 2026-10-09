@@ -11,8 +11,9 @@
     /* Live Japanese subtitles sent by the phone (VideoDownloader's live translation). */
     #sub { position: fixed; left: 0; right: 0; bottom: 6%; z-index: 1000; text-align: center;
            pointer-events: none; display: none; }
-    #sub span { display: inline-block; max-width: 80%; background: rgba(0,0,0,0.72); color: #fff;
-                font-size: 40px; line-height: 1.35; padding: 8px 22px; border-radius: 8px;
+    #sub span { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+                max-width: 80%; background: rgba(16,16,16,0.95); color: #fff;
+                font-size: 32px; line-height: 1.35; padding: 6px 22px; border-radius: 8px;
                 font-family: "Noto Sans CJK JP", "Noto Sans JP", sans-serif; }
   </style>
 </head>
@@ -99,8 +100,20 @@
     let subTimer = null;
     context.addCustomMessageListener(NS, function (e) {
       const d = e.data || {};
+      if (d.kind === 'subclear') { clearTimeout(subTimer); subBox.style.display = 'none'; return; }
       if (d.kind !== 'sub' || typeof d.text !== 'string') return;
       subBox.firstChild.textContent = d.text;
+      // Over the picture's own (Chinese) subtitle when the phone says where it is: the video
+      // fills the screen, so its fractions of the frame are fractions of the screen.
+      if (typeof d.top === 'number' && typeof d.bottom === 'number' && d.bottom > d.top) {
+        const mid = (d.top + d.bottom) / 2;
+        subBox.style.bottom = 'auto';
+        subBox.style.top = 'calc(' + (mid * 100) + 'vh - ' + 'max(' + ((d.bottom - d.top) * 50 + 1) + 'vh, 28px))';
+        subBox.firstChild.style.minHeight = 'calc(' + ((d.bottom - d.top) * 100 + 2) + 'vh)';
+      } else {
+        subBox.style.top = 'auto'; subBox.style.bottom = '6%';
+        subBox.firstChild.style.minHeight = '0';
+      }
       subBox.style.display = 'block';
       clearTimeout(subTimer);
       subTimer = setTimeout(function () { subBox.style.display = 'none'; }, Math.min(d.ms || 4000, 9000));
