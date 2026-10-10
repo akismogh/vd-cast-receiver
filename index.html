@@ -106,10 +106,16 @@
       // Over the picture's own (Chinese) subtitle when the phone says where it is: the video
       // fills the screen, so its fractions of the frame are fractions of the screen.
       if (typeof d.top === 'number' && typeof d.bottom === 'number' && d.bottom > d.top) {
-        const mid = (d.top + d.bottom) / 2;
-        subBox.style.bottom = 'auto';
-        subBox.style.top = 'calc(' + (mid * 100) + 'vh - ' + 'max(' + ((d.bottom - d.top) * 50 + 1) + 'vh, 28px))';
-        subBox.firstChild.style.minHeight = 'calc(' + ((d.bottom - d.top) * 100 + 2) + 'vh)';
+        // Plain pixels: the Chromecast's older browser engine drops calc()/max() it does not
+        // know, and a dropped `top` left the line at the very top of the screen (2026-10-10).
+        const H = window.innerHeight || 720;
+        const band = (d.bottom - d.top) * H;
+        subBox.firstChild.style.minHeight = Math.round(band + 0.02 * H) + 'px';
+        subBox.style.top = '0px'; subBox.style.bottom = 'auto';
+        subBox.style.display = 'block';
+        const boxH = subBox.firstChild.offsetHeight || band;
+        const top = Math.max(0, Math.min(H - boxH, (d.top + d.bottom) / 2 * H - boxH / 2));
+        subBox.style.top = Math.round(top) + 'px';
       } else {
         subBox.style.top = 'auto'; subBox.style.bottom = '6%';
         subBox.firstChild.style.minHeight = '0';
